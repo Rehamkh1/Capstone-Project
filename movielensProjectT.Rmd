@@ -1,0 +1,763 @@
+---
+title: "MovielensProjectT"
+author: "REHAM ALSHEHRI"
+date: "1/20/2022"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+library(tigerstats)
+library(knitr)
+opts_chunk$set(echo = FALSE)
+```
+
+
+```{r}
+#if(!require(tidyverse)) install.packages("tidyverse", repos = "http://cran.us.r-project.org")
+#if(!require(caret)) install.packages("caret", repos = "http://cran.us.r-project.org")
+#if(!require(data.table)) install.packages("data.table", repos = "http://cran.us.r-project.org")
+
+library(tidyverse)
+library(caret)
+library(data.table)
+
+# MovieLens 10M dataset:
+# https://grouplens.org/datasets/movielens/10m/v
+# http://files.grouplens.org/datasets/movielens/ml-10m.zip
+
+dl <- tempfile()
+download.file("http://files.grouplens.org/datasets/movielens/ml-10m.zip", dl)
+
+ratings <- fread(text = gsub("::", "\t", readLines(unzip(dl, "ml-10M100K/ratings.dat"))),
+                 col.names = c("userId", "movieId", "rating", "timestamp"))
+
+movies <- str_split_fixed(readLines(unzip(dl, "ml-10M100K/movies.dat")), "\\::", 3)
+colnames(movies) <- c("movieId", "title", "genres")
+
+# if using R 3.6 or earlier:
+#movies <- as.data.frame(movies) %>% mutate(movieId = as.numeric(levels(movieId))[movieId],
+ #                                           title = as.character(title),
+  #                                          genres = as.character(genres))
+# if using R 4.0 or later:
+movies <- as.data.frame(movies) %>% mutate(movieId = as.numeric(movieId),
+                                            title = as.character(title),
+                                            genres = as.character(genres))
+
+
+movielens <- left_join(ratings, movies, by = "movieId")
+
+# Validation set will be 10% of MovieLens data
+set.seed(1) # if using R 3.5 or earlier, use `set.seed(1)`
+test_index <- createDataPartition(y = movielens$rating, times = 1, p = 0.1, list = FALSE)
+edx <- movielens[-test_index,]
+temp <- movielens[test_index,]
+
+# Make sure userId and movieId in validation set are also in edx set
+validation <- temp %>% 
+      semi_join(edx, by = "movieId") %>%
+      semi_join(edx, by = "userId")
+
+# Add rows removed from validation set back into edx set
+removed <- anti_join(temp, validation)
+edx <- rbind(edx, removed)
+
+rm(dl, ratings, movies, test_index, temp, movielens, removed)
+
+```
+
+# Introduction
+
+In e-commerce or internet streaming sites like Netflix, Facebook, and eBay, recommendation algorithms are critical (Lu, Wu, Mao, Wang, & Zhang, 2015). Providing the appropriate suggestion for another product, song, or film boosts customer retention and happiness, which results in increased sales and profits. Businesses striving for customer satisfaction investment in platforms that collect and process users’ preferences and then recommend items or services that are more likely to be purchased (Gomez-Uribe & Hunt, 2015). The economic consequence of this kind of business-customer connection is obvious: Amazon is the world's biggest online retailer by revenue, and a major advantages of their strategy is due to its recommender system and direct advertising based on the customer interests (Smith & Linden, 2017). 
+Typically, recommender system use a grading range of one to 5 categories or stars ratings, with one representing the lowest level of satisfaction and five indicating the greatest degree of satisfaction. Additionally, other factors such as opinions expressed on previously used products; clip, songs, or URL sharing with mates; proportion of movies watched or songs started listening; web sites went to visit and hours invested on every website; product group; or any connection with the firm's web application might be utilized as predictors (Jain, Grover, Thakur, & Choudhary, 2015). The basic objective of recommender system is to assist users in locating desired items tastes and preferences and prior interactions, as well as to forecast the ratings of a specific product. Here, we develop a movie recommender systems in this analysis by utilizing the 'MovieLens' dataset and implementing the solution to get lowest error score for the model (grouplens, 2009).
+
+
+# Project Objectives
+
+The main objective of this analysis is to build the model which have the lowest RMSE score from 0.86490 and compare the various models on the validation dataset. 
+
+## Dataset
+
+Movielens dataset is utilized here to conduct the analysis. Here, we only considered it 10M subset of the whole dataset to make a recommender system on the dataset (grouplens, 2009). 
+
+# Methods
+
+## Data Exploration with Descriptive Analysis
+
+Data exploration with descriptive analysis is very useful step which helps to understand the dataset dimensions, structure and relationship with each other. This step is performed to get the familiarization of the dataset and find the hidden insights from ii. For this purpose, we utilized the various types of the charts, tables, histograms and summary statistics on the dataset. Moreover, this phase also utilized to draw an attractive, catchy and meaningful visualization using the various types of the features in the dataset. There is total '6' variables and '9000055' objects in the dataset. There are some integer variables and some of them are character. The data type of for each variable is shown here. 
+
+```{r}
+# instance and objects in the EDX dataset are shown using this command. 
+str(edx)
+```
+
+Moreover, the dim() command is utilized as well to find the dimension of the dataset and its found that there are 9000055 and 6 objects and columns in the EDX dataset respectively. 
+
+```{r}
+#The dimension of the dataset
+dim(edx)
+```
+
+.The summary of the numerical variable in the dataset is also shown below that have their min, max, 1st, 2nd, 3rd quartiles and mean values using the summary() command.
+
+```{r}
+summary(edx)
+```
+
+
+The top '5' and bottom '5' rows from the EDX dataset is shown below. There are total columns in the dataset and their names are presented as well. Moreover, here is the target variable is 'rating' and all other are features. The movies information with against each 'userid' is given for each row that can be scene easily.
+
+
+```{r}
+#Top five rows from the dataset
+head(edx,n=5)
+```
+```{r}
+# Bottom five rows
+tail(edx,n=5)
+```
+
+Now, the detailed description for the each column is the dataset is being described using the tables and charts. Their details is given below as a reference. 
+
+### Genres Feature
+
+In this dataset, there is column with the name of 'genres' and have the information about the various movies genres. The summary of the genres features is computed using the summary function with 'groupby' and top '10' genres are displayed below in a table. The highest genre for action/adventure category that is '68688'. The numbers for other categories are also given below. Moreover, the unique genres length in the dataset is 797.
+
+
+```{r}
+# The uniques generes in the dataset
+length(unique(edx$genres))
+```
+
+```{r}
+edx %>% group_by(genres) %>% 
+  summarise(n=n()) %>%
+  head(10)
+```
+
+
+### Timestamp (Date) Feature
+
+The date feature is calculated from the 'timestamp' feature that have almost 14 years of the time period. This period is mutated and calculated as well. 
+
+
+```{r}
+library(lubridate)
+tibble(`Initial Date` = date(as_datetime(min(edx$timestamp), origin="1970-01-01")),
+       `Final Date` = date(as_datetime(max(edx$timestamp), origin="1970-01-01"))) %>%
+  mutate(Period = duration(max(edx$timestamp)-min(edx$timestamp)))
+
+```
+
+The ratings distribution for each year is also plotted calculating the years from 'timestamp' variable and outcome shows that the highest rating in 2000 year. On the other hand, the distribution for the other also given here and can be scene easily.
+
+
+
+
+```{r}
+library(ggthemes)
+library(scales)
+edx %>% mutate(year = year(as_datetime(timestamp, origin="1970-01-01"))) %>%
+  ggplot(aes(x=year)) +
+    geom_histogram(color = "red") + 
+    ggtitle("Distribution of Rating Per Year") +
+    xlab("Year") +
+    ylab("Number of Ratings") +
+    scale_y_continuous(labels = comma )+
+    theme_bw()
+
+```
+
+
+### Ratings Target
+
+The ratings of the movies are also visualized using the bar chart. The range of rating is also given below and it shows that the most movies rating are '4'. It means that the user have good experience while watching the movies in this data set. There are total '10' ratings and these are displayed below. 
+
+```{r}
+edx %>%
+  ggplot(aes(rating, y = ..prop..)) +
+  geom_bar(color = "black", fill = "deepskyblue2") +
+  ggtitle("Rating Count in Dataset")+
+  labs(x = "Ratings", y = "Relative Frequency") +
+  scale_x_continuous(breaks = c(0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5)) 
+```
+
+### Movies Feature
+
+The movies unique length in the EDX dataset is '10677' which means that these number are unique in dataset and their length is also calculated. 
+
+```{r}
+length(unique(edx$movieId))
+```
+
+The count numbers of MoviesID is also determined and displayed their frequent against each number using the histogram. Outcomes shows that the most of the movies have the range from 50-500. This range frequency is higher than to other one. 
+
+
+
+```{r}
+
+edx %>% group_by(movieId) %>%
+  summarize(count = n()) %>%
+  ggplot(aes(count)) +
+  geom_histogram(color = "black", fill = "red", bins = 70) +
+  ggtitle("Count Numbers by Movies ID")+
+  xlab("N") +
+  ylab("Frequecny") +
+  scale_x_log10() 
+
+```
+
+### Users Feature
+
+The unique length of the Users with respect to their ID's is '69878' and there are total '9000055' rows in the dataset. 
+
+```{r}
+length(unique(edx$userId))
+```
+
+The histogram for the Users Id is determined that is the left skewed. The count ratio of users id have  maximum values from 30-70 range. The distribution of the dataset can be scene easily. 
+```{r plots}
+
+edx %>% group_by(userId) %>%
+  summarize(count = n()) %>%
+  ggplot(aes(count)) +
+  geom_histogram(color = "black", fill = "pink", bins = 40) +
+  ggtitle("Count Numbers by User ID")+
+  xlab("N") +
+  ylab("Count") +
+  scale_x_log10() 
+```
+
+
+## Data Partitioned for Training and Testing
+
+The EDX dataset is partitioned for training and testing with the ratio of 90% and 10% respectively. 
+
+
+```{r}
+set.seed(1)
+test_index <- createDataPartition(y = edx$rating, times = 1, p = 0.1, list = FALSE)
+train_set <- edx[-test_index,]
+temp <- edx[test_index,]
+
+# Make sure userId and movieId in test set are also in train set
+test_set <- temp %>% 
+  semi_join(train_set, by = "movieId") %>%
+  semi_join(train_set, by = "userId")
+
+# Add rows removed from test set back into train set
+removed <- anti_join(temp, test_set)
+train_set <- rbind(train_set, removed)
+
+rm(test_index, temp, removed)
+```
+## Data Cleaning Process 
+
+As stated previously, various characteristics may be utilized to forecast a user's rating based on his or her behavior. In this analysis, nevertheless, the predicted ratings are based just on info from the movie and from the users, since a large number of predictors enhances the computational burden of model and demands more computational power.
+
+```{r}
+train_set <- train_set %>% select(userId, movieId, rating, title)
+test_set  <- test_set  %>% select(userId, movieId, rating, title)
+```
+
+## Modeling Process  
+
+The Modeling is very useful process which helps to build the on the choose variables. So, here various types of the Models aree being developed on the dataset and their MSE, MAE, MSE are calculated and compared the. Our main goal is to achieve the low RMSE score as compared to the baseline that is 0.864900. 
+
+### Random Predictions Modeling
+
+A very basic approach is to simply forecast the rating's randomly based on the distribution's of probability obtained throughout data analysis. For instance, if it is known that the likelihood of complete users assigning a film a ratings of '3' is '10 %', it may assume that '10%' to ratings will be 3. Thus a forecast establishes the worst-case scenario, implying that any other modeling must provide a more accurate outcome.
+
+### Linear Modeling  
+
+The easiest model forecast that all users would rate all movies equally and that the discrepancy between movies is due to arbitrarily distributed errors. Even though the projected rating may be whatever number, statistical theory dictates that the averaging minimizes the root mean square error (RMSE), and hence the first forecast is simply the mean of all recorded values (ratings).
+
+$$\hat{b}_{u}= \frac{1}{N}\sum_{i=1}^N ({y_{u,i}} -\hat{b}_{i} -\hat\mu)$$
+
+### Regularization Modeling
+
+While the linear modeling offers an accurate prediction of the ratings, it ignores the fact that several movies get a small number of ratings and that certain people rate relatively few movies. It indicates that now the sample group for such movies & users is rather limited. This results in a substantial estimated mistake in terms of statistics.
+The approximate amount may be enhanced by having a component that penalizes small samples but has little or no effect on the estimated worth elsewhere. Therefore, the following formulae may be used to compute projected movie and user impacts.
+
+$$\hat{b}_{u}= \frac{1}{n_{u}+\lambda}\sum_{i=1}^{n_u} ({y_{u,i}} -\hat{b}_{i} -\hat\mu)$$
+
+
+### Matrix Factorization Method
+
+It is a frequently used data mining technique for rating prediction in recommender system. This technique gained widespread attention even during Netflix prize competition (NetFlix). The recosystem package in R is utilized to implement the matrix factorization on the dataset (CRAN). 
+
+
+
+# Results
+
+The comparison and implementation of the various techniques is compared and find the most optimal solution for the problem. 
+
+
+## Metrics for Models Assessment 
+
+The evaluation metrics are evaluated and assed the performance of each model, Their names are RMSE, MAE and MSE.
+ 
+
+```{r}
+# Mean Absolute Error (MAE)
+MAE <- function(true_ratings, predicted_ratings){
+  mean(abs(true_ratings - predicted_ratings))
+}
+
+# Mean Squared Error (MAE)
+MSE <- function(true_ratings, predicted_ratings){
+  mean((true_ratings - predicted_ratings)^2)
+}
+
+# Root Mean Squared Error (RMSE)
+RMSE <- function(true_ratings, predicted_ratings){
+  sqrt(mean((true_ratings - predicted_ratings)^2))
+}
+```
+
+## Random modeling Prediction
+
+The random modeling prediction is being applied here on the dataset. 
+
+```{r}
+set.seed(4321)
+
+# Create the probability of each rating
+p <- function(x, y) mean(y == x)
+rating <- seq(0.5,5,0.5)
+
+# Estimate the probability of each rating with Monte Carlo simulation
+B <- 10^3
+M <- replicate(B, {
+  s <- sample(train_set$rating, 100, replace = TRUE)
+  sapply(rating, p, y= s)
+})
+prob <- sapply(1:nrow(M), function(x) mean(M[x,]))
+
+# Predict random ratings
+y_hat_random <- sample(rating, size = nrow(test_set), 
+                       replace = TRUE, prob = prob)
+
+# Create a table with the error results
+result <- tibble(Method = "Baseline (Project Goal)", RMSE = 0.8649, MSE = NA, MAE = NA)
+result <- bind_rows(result, 
+                    tibble(Method = "Random prediction", 
+                           RMSE = RMSE(test_set$rating, y_hat_random),
+                           MSE  = MSE(test_set$rating, y_hat_random),
+                           MAE  = MAE(test_set$rating, y_hat_random)))
+```
+
+The RMSE values is very huge.
+
+```{r}
+result
+```
+
+## Linear Modeling
+ It is implemented and results are shown below:
+ 
+
+```{r}
+# Mean of observed values
+mu <- mean(train_set$rating)
+
+# Update the error table  
+result <- bind_rows(result, 
+                    tibble(Method = "Mean", 
+                           RMSE = RMSE(test_set$rating, mu),
+                           MSE  = MSE(test_set$rating, mu),
+                           MAE  = MAE(test_set$rating, mu)))
+# Show the RMSE improvement  
+result
+```
+
+### Include Movie Effect (bi)  
+
+
+```{r}
+# Movie effects (bi)
+bi <- train_set %>% 
+  group_by(movieId) %>% 
+  summarize(b_i = mean(rating - mu))
+head(bi)
+```
+
+
+
+```{r}
+# Predict the rating with mean + bi  
+y_hat_bi <- mu + test_set %>% 
+  left_join(bi, by = "movieId") %>% 
+  .$b_i
+
+# Calculate the RMSE  
+result <- bind_rows(result, 
+                    tibble(Method = "Mean + bi", 
+                           RMSE = RMSE(test_set$rating, y_hat_bi),
+                           MSE  = MSE(test_set$rating, y_hat_bi),
+                           MAE  = MAE(test_set$rating, y_hat_bi)))
+
+# Show the RMSE improvement  
+result
+```
+
+### Include User Effect (bu)  
+
+Predict the rating with mean + bi + bu  
+
+```{r}
+# User effect (bu)
+bu <- train_set %>% 
+  left_join(bi, by = 'movieId') %>%
+  group_by(userId) %>%
+  summarize(b_u = mean(rating - mu - b_i))
+
+# Prediction
+y_hat_bi_bu <- test_set %>% 
+  left_join(bi, by='movieId') %>%
+  left_join(bu, by='userId') %>%
+  mutate(pred = mu + b_i + b_u) %>%
+  .$pred
+
+# Update the results table
+result <- bind_rows(result, 
+                    tibble(Method = "Mean + bi + bu", 
+                           RMSE = RMSE(test_set$rating, y_hat_bi_bu),
+                           MSE  = MSE(test_set$rating, y_hat_bi_bu),
+                           MAE  = MAE(test_set$rating, y_hat_bi_bu)))
+
+# Show the RMSE improvement  
+result
+```
+
+
+### Evaluating the model result
+
+```{r}
+train_set %>% 
+  left_join(bi, by='movieId') %>%
+  mutate(residual = rating - (mu + b_i)) %>%
+  arrange(desc(abs(residual))) %>%  
+  slice(1:10)
+
+```
+
+```{r}
+
+titles <- train_set %>% 
+  select(movieId, title) %>% 
+  distinct()
+
+```
+
+Top 10 best movies (ranked by bi).  
+These are unknown movies  
+```{r}
+bi %>% 
+  inner_join(titles, by = "movieId") %>% 
+  arrange(-b_i) %>% 
+  select(title) %>%
+  head(10)
+
+```
+
+
+## Regularization Modeling 
+
+ It is applied here. 
+
+
+
+```{r}
+
+regularization <- function(lambda, trainset, testset){
+
+  # Mean
+  mu <- mean(trainset$rating)
+
+  # Movie effect (bi)
+  b_i <- trainset %>% 
+    group_by(movieId) %>%
+    summarize(b_i = sum(rating - mu)/(n()+lambda))
+
+  # User effect (bu)  
+  b_u <- trainset %>% 
+    left_join(b_i, by="movieId") %>%
+    filter(!is.na(b_i)) %>%
+    group_by(userId) %>%
+    summarize(b_u = sum(rating - b_i - mu)/(n()+lambda))
+
+  # Prediction: mu + bi + bu  
+  predicted_ratings <- testset %>% 
+    left_join(b_i, by = "movieId") %>%
+    left_join(b_u, by = "userId") %>%
+    filter(!is.na(b_i), !is.na(b_u)) %>%
+    mutate(pred = mu + b_i + b_u) %>%
+    pull(pred)
+  
+  return(RMSE(predicted_ratings, testset$rating))
+}
+
+# Define a set of lambdas to tune
+lambdas <- seq(0, 10, 0.25)
+
+# Update RMSES table
+rmses <- sapply(lambdas, 
+                regularization, 
+                trainset = train_set, 
+                testset = test_set)
+
+# Plot the lambda x RMSE
+tibble(Lambda = lambdas, RMSE = rmses) %>%
+  ggplot(aes(x = Lambda, y = RMSE)) +
+    geom_point() +
+    ggtitle("Regularization", 
+            subtitle = "Pick the penalization that gives the lowest RMSE.") 
+
+```
+
+
+Next, we apply the best 'lambda' to the linear model.
+
+```{r}
+
+# We pick the lambda that returns the lowest RMSE.
+lambda <- lambdas[which.min(rmses)]
+
+# Then, we calculate the predicted rating using the best parameters 
+# achieved from regularization.  
+mu <- mean(train_set$rating)
+
+# Movie effect (bi)
+b_i <- train_set %>% 
+  group_by(movieId) %>%
+  summarize(b_i = sum(rating - mu)/(n()+lambda))
+
+# User effect (bu)
+b_u <- train_set %>% 
+  left_join(b_i, by="movieId") %>%
+  group_by(userId) %>%
+  summarize(b_u = sum(rating - b_i - mu)/(n()+lambda))
+
+# Prediction
+y_hat_reg <- test_set %>% 
+  left_join(b_i, by = "movieId") %>%
+  left_join(b_u, by = "userId") %>%
+  mutate(pred = mu + b_i + b_u) %>%
+  pull(pred)
+
+# Update the result table
+result <- bind_rows(result, 
+                    tibble(Method = "Regularized bi and bu", 
+                           RMSE = RMSE(test_set$rating, y_hat_reg),
+                           MSE  = MSE(test_set$rating, y_hat_reg),
+                           MAE  = MAE(test_set$rating, y_hat_reg)))
+
+# Regularization made a small improvement in RMSE.  
+result
+
+```
+
+## Matrix Factorization Modeling
+
+It took much time so recosystem package is applied on the dataset and compute the results for better RMSE, MSE and MAE score.  
+
+
+```{r}
+
+#Usage of `recosystem
+library(recosystem)
+set.seed(123) # This is a randomized algorithm
+
+# Convert the train and test sets into recosystem input format
+train_data <-  with(train_set, data_memory(user_index = userId, 
+                                           item_index = movieId, 
+                                           rating     = rating))
+test_data  <-  with(test_set,  data_memory(user_index = userId, 
+                                           item_index = movieId, 
+                                           rating     = rating))
+
+# Create the model object
+r <-  recosystem::Reco()
+
+# Select the best tuning parameters
+opts <- r$tune(train_data, opts = list(dim = c(10, 20, 30), 
+                                       lrate = c(0.1, 0.2),
+                                       costp_l2 = c(0.01, 0.1), 
+                                       costq_l2 = c(0.01, 0.1),
+                                       nthread  = 4, niter = 10))
+
+ # Train the algorithm  
+r$train(train_data, opts = c(opts$min, nthread = 4, niter = 20))
+
+# Calculate the predicted values  
+y_hat_reco <-  r$predict(test_data, out_memory())
+head(y_hat_reco, 10)
+
+```
+
+It’s a very robust model and increase the results potentially. 
+
+```{r}
+
+result <- bind_rows(result, 
+                    tibble(Method = "Matrix Factorization - recosystem", 
+                           RMSE = RMSE(test_set$rating, y_hat_reco),
+                           MSE  = MSE(test_set$rating, y_hat_reco),
+                           MAE  = MAE(test_set$rating, y_hat_reco)))
+result
+
+```
+
+## Final Validation Preocess 
+
+As seen in the result table, regularisation modeling and matrix factorization modeling both reduced the RMSE to the desired value. Ultimately, we trained both models on the whole 'edx' set and compute the root mean square error (RMSE) on the 'validation' subset. The project's objective is met if the root mean square error (RMSE) remains below the target value.
+
+### Linear Modeling With Regularization modeling
+
+As during train and test data, the linear modeling with regularisation came within a narrow margin of the goal RMSE. With the 'validation' set, we perform the final validation.
+
+
+```{r}
+
+mu_edx <- mean(edx$rating)
+
+# Movie effect (bi)
+b_i_edx <- edx %>% 
+  group_by(movieId) %>%
+  summarize(b_i = sum(rating - mu_edx)/(n()+lambda))
+
+# User effect (bu)
+b_u_edx <- edx %>% 
+  left_join(b_i_edx, by="movieId") %>%
+  group_by(userId) %>%
+  summarize(b_u = sum(rating - b_i - mu_edx)/(n()+lambda))
+
+# Prediction
+y_hat_edx <- validation %>% 
+  left_join(b_i_edx, by = "movieId") %>%
+  left_join(b_u_edx, by = "userId") %>%
+  mutate(pred = mu_edx + b_i + b_u) %>%
+  pull(pred)
+
+# Update the results table
+result <- bind_rows(result, 
+                    tibble(Method = "Final Regularization (edx vs validation)", 
+                           RMSE = RMSE(validation$rating, y_hat_edx),
+                           MSE  = MSE(validation$rating, y_hat_edx),
+                           MAE  = MAE(validation$rating, y_hat_edx)))
+
+# Show the RMSE improvement
+result 
+
+```
+
+As expected, the root mean square error computed on the 'validation' set is less than the goal of 0.8649 and somewhat more than the root mean square error obtained on the test set.
+
+Top 10 best movies  
+```{r}
+
+validation %>% 
+  left_join(b_i_edx, by = "movieId") %>%
+  left_join(b_u_edx, by = "userId") %>% 
+  mutate(pred = mu_edx + b_i + b_u) %>% 
+  arrange(-pred) %>% 
+  group_by(title) %>% 
+  select(title) %>%
+  head(10)
+
+```
+
+Top 10 worst movies  
+```{r }
+
+validation %>% 
+  left_join(b_i_edx, by = "movieId") %>%
+  left_join(b_u_edx, by = "userId") %>% 
+  mutate(pred = mu_edx + b_i + b_u) %>% 
+  arrange(pred) %>% 
+  group_by(title) %>% 
+  select(title) %>%
+  head(10)
+
+```
+### Matrix Factorization
+
+The first test demonstrates that matrix factorization produces the lowest root mean square error. Validate now using the whole 'edx' and 'validation' sets.
+
+```{r}
+
+set.seed(1234)
+
+# Convert 'edx' and 'validation' sets to recosystem input format
+edx_reco <-  with(edx, data_memory(user_index = userId, 
+                                   item_index = movieId, 
+                                   rating = rating))
+validation_reco  <-  with(validation, data_memory(user_index = userId, 
+                                                  item_index = movieId, 
+                                                  rating = rating))
+
+# Create the model object
+r <-  recosystem::Reco()
+
+# Tune the parameters
+opts <-  r$tune(edx_reco, opts = list(dim = c(10, 20, 30), 
+                                     lrate = c(0.1, 0.2),
+                                     costp_l2 = c(0.01, 0.1), 
+                                     costq_l2 = c(0.01, 0.1),
+                                     nthread  = 4, niter = 10))
+
+# Train the model
+r$train(edx_reco, opts = c(opts$min, nthread = 4, niter = 20))
+
+# Calculate the prediction
+y_hat_final_reco <-  r$predict(validation_reco, out_memory())
+
+# Update the result table
+result <- bind_rows(result, 
+                    tibble(Method = "Final Matrix Factorization - recosystem", 
+                           RMSE = RMSE(validation$rating, y_hat_final_reco),
+                           MSE  = MSE(validation$rating, y_hat_final_reco),
+                           MAE  = MAE(validation$rating, y_hat_final_reco)))
+
+```
+
+The final RMSE with matrix factorization is better than the linear model with regularization 
+
+```{r}
+
+# Show the RMSE improvement
+
+result 
+
+```
+
+Now, let's check the best and worst movies predicted with matrix factorization.
+
+Top 10 best movies:  
+
+```{r}
+
+tibble(title = validation$title, rating = y_hat_final_reco) %>%
+  arrange(-rating) %>% 
+  group_by(title) %>% 
+  select(title) %>%
+  head(10)
+
+```
+
+Top 10 worst movies:  
+```{r}
+
+tibble(title = validation$title, rating = y_hat_final_reco) %>%
+  arrange(rating) %>% 
+  group_by(title) %>% 
+  select(title) %>%
+  head(10)
+
+```
+
+# Conclusion
+
+We began by gathering and prepping the data for evaluation, and then analyzing the it in search of findings that may aid in the modelling process. Secondly, using the probabilistic model of every ratings, we constructed a randomized modeling that predict the ratings. The said model produces the most inaccurate outcome. Afterward, we began the linear modeling by constructing a very basic model consisting just from the average of the observed data. From and where it, we incorporated movie and users' effects to simulate user activity and distribution of movies. We introduced a penalties value to regularisation for films and people with a small number of rating. The linear modeling produced a root mean square error of 0.8648, above the objective of 0.8649. Lastly, we assessed the recosystem library, which implements the LIBMF method, and determined that the root mean square error (RMSE) was 0.7826 that is the most lowest one.
+
